@@ -1,6 +1,7 @@
 package broadlink
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
@@ -29,7 +30,6 @@ type HeaterCooler struct {
 	Data struct {
 		Active    []byte
 		DisActive []byte
-		Current
 	}
 }
 
@@ -105,7 +105,24 @@ func Discover(timeout time.Duration) (devs []*Device, err error) {
 	fmt.Printf("packet: %v\n", packet)
 
 	//udpcon.SetDeadline(starttime.Add(timeout))
+	udpcon.Write(packet[:])
 
+	//read
+	udpcon.SetReadDeadline(time.Now().Add(timeout))
+	resp := make([]byte, 1024)
+
+	var size int
+	size, err = udpcon.Read(resp)
+	if err != nil {
+		return
+	}
+
+	fmt.Printf("get %d\n", size)
+	if size > 0 {
+		fmt.Printf("%v", resp)
+	} else {
+		err = errors.New("can't read anything!")
+	}
 	return
 }
 
