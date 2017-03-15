@@ -35,19 +35,19 @@ type HeaterCooler struct {
 
 func Discover(timeout time.Duration) (devs []*Device, err error) {
 	devs = make([]*Device, 0)
-	raddr := &net.UDPAddr{
-		IP:   net.ParseIP("255.255.255.255"),
+	mc_addr := &net.UDPAddr{
+		IP:   net.IPv4bcast,
 		Port: 80,
 	}
 
 	var udpcon *net.UDPConn
-	udpcon, err = net.DialUDP("udp", nil, raddr)
+	udpcon, err = net.ListenUDP("udp", nil)
 	if err != nil {
 		return
 	}
 
 	//ip and port
-	ip_port := strings.SplitN(udpcon.LocalAddr().String(), ":", 2)
+	ip_port := strings.SplitN(GetLocalAddr().String(), ":", 2)
 	localip := ip_port[0]
 	source_port, _ := strconv.Atoi(ip_port[1])
 	address := strings.Split(localip, ".")
@@ -105,19 +105,20 @@ func Discover(timeout time.Duration) (devs []*Device, err error) {
 	fmt.Printf("packet: %v\n", packet)
 
 	//udpcon.SetDeadline(starttime.Add(timeout))
-	udpcon.Write(packet[:])
+	udpcon.WriteTo(packet[:], mc_addr)
 
 	//read
 	udpcon.SetReadDeadline(time.Now().Add(timeout))
 	resp := make([]byte, 1024)
 
 	var size int
-	size, err = udpcon.Read(resp)
+	var raddr net.Addr
+	size, raddr, err = udpcon.ReadFrom(resp)
 	if err != nil {
 		return
 	}
 
-	fmt.Printf("get %d\n", size)
+	fmt.Printf("get %d bytes from %s\n", size, raddr.String())
 	if size > 0 {
 		fmt.Printf("%v", resp)
 	} else {
