@@ -11,26 +11,7 @@ import (
 
 type Manager struct {
 	con *net.UDPConn
-	Rm  *Device
-}
-
-type RmDevice struct {
-	*Device
-	HeaterCoolers map[string]*HeaterCooler
-}
-
-type Device struct {
-	Name string
-	Host string
-	MAC  string
-}
-
-type HeaterCooler struct {
-	*Device
-	Data struct {
-		Active    []byte
-		DisActive []byte
-	}
+	Rm  *BaseDevice
 }
 
 func Discover(timeout time.Duration) (devs []*Device, err error) {
@@ -119,11 +100,21 @@ func Discover(timeout time.Duration) (devs []*Device, err error) {
 	}
 
 	fmt.Printf("get %d bytes from %s\n", size, raddr.String())
-	if size > 0 {
-		fmt.Printf("%v", resp)
-	} else {
+	if size == 0 {
 		err = errors.New("can't read anything!")
+		return
 	}
+
+	fmt.Println(resp[:size])
+
+	host := raddr.String()
+	devtype := uint16(resp[0x34]) | uint16(resp[0x35])<<8
+	mac := resp[0x3a:0x40]
+
+	bd := newBaseDevice(con, host, mac)
+	dev := bd.newDevice(devtype)
+	devs = append(devs, dev)
+
 	return
 }
 
