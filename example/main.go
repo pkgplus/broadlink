@@ -12,7 +12,7 @@ func main() {
 	}
 
 	for _, dev := range devs {
-		rmdev := dev.(*RmDevice)
+		rmdev := dev.(*broadlink.RmDevice)
 		err = rmdev.BaseDevice.Auth()
 		if err != nil {
 			panic(err)

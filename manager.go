@@ -75,11 +75,7 @@ func Discover(timeout time.Duration) (devs []Device, err error) {
 	packet[0x26] = 6
 
 	//checksum
-	checksum := 0xbeaf
-	for _, b := range packet {
-		checksum += int(b)
-	}
-	checksum = checksum & 0xffff
+	checksum := getCheckSum(packet)
 	packet[0x20] = byte(checksum & 0xff)
 	packet[0x21] = byte(checksum >> 8)
 
