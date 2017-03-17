@@ -6,8 +6,16 @@ import (
 )
 
 func main() {
-	_, err := broadlink.Discover(5 * time.Second)
+	devs, err := broadlink.Discover(5 * time.Second)
 	if err != nil {
 		panic(err)
+	}
+
+	for _, dev := range devs {
+		rmdev := dev.(*RmDevice)
+		err = rmdev.BaseDevice.Auth()
+		if err != nil {
+			panic(err)
+		}
 	}
 }

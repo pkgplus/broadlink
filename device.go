@@ -1,6 +1,8 @@
 package broadlink
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"fmt"
 	"net"
 )
@@ -9,7 +11,7 @@ type Device interface{}
 
 type BaseDevice struct {
 	con   *net.UDPConn
-	count uint32
+	count uint16
 
 	Host string
 	MAC  []byte
@@ -34,7 +36,7 @@ func newBaseDevice(con *net.UDPConn, host string, mac []byte) (dev *BaseDevice) 
 }
 
 func (bd *BaseDevice) newDevice(devtype uint16) (dev Device) {
-	fmt.Printf("devtype:%x host:%s mac:%x\n", devtype, host, mac)
+	fmt.Printf("devtype:%x host:%s mac:%x\n", devtype, bd.Host, bd.MAC)
 
 	switch devtype {
 	// RM Mini
@@ -46,7 +48,7 @@ func (bd *BaseDevice) newDevice(devtype uint16) (dev Device) {
 	return
 }
 
-func (bd *BaseDevice) Auth() {
+func (bd *BaseDevice) Auth() error {
 	payload := make([]byte, 0x50)
 	payload[0x04] = 0x31
 	payload[0x05] = 0x31
@@ -72,9 +74,31 @@ func (bd *BaseDevice) Auth() {
 	payload[0x34] = ' '
 	payload[0x35] = ' '
 	payload[0x36] = '1'
+
+	response, err := bd.SendPacket(0x65, payload)
+	if err != nil {
+		return err
+	}
+
+	//decode
+	enc_payload := response[0x38:]
+	//aes = AES.new(bytes(self.key), AES.MODE_CBC, bytes(self.iv))
+	//payload = aes.decrypt(bytes(enc_payload))
+	block, aes_err := aes.NewCipher(bd.key)
+	if aes_err != nil {
+		return aes_err
+	}
+	mode := cipher.NewCBCDecrypter(block, bd.iv)
+	mode.CryptBlocks(payload, enc_payload)
+
+	bd.id = payload[0x00:0x04]
+	bd.key = payload[0x04:0x14]
+
+	return nil
 }
 
-func (bd *BaseDevice) SendPacket(command byte, payload []byte) {
+func (bd *BaseDevice) SendPacket(command byte, payload []byte) (resp []byte, err error) {
+	resp = make([]byte, 1024)
 	bd.count = (bd.count + 1) & 0xffff
 
 	packet := make([]byte, 0x38)
@@ -90,8 +114,8 @@ func (bd *BaseDevice) SendPacket(command byte, payload []byte) {
 	packet[0x24] = 0x2a
 	packet[0x25] = 0x27
 	packet[0x26] = command
-	packet[0x28] = bd.count & 0xff
-	packet[0x29] = bd.count >> 8
+	packet[0x28] = byte(bd.count & 0xff)
+	packet[0x29] = byte(bd.count >> 8)
 	packet[0x2a] = bd.MAC[0]
 	packet[0x2b] = bd.MAC[1]
 	packet[0x2c] = bd.MAC[2]
@@ -104,14 +128,55 @@ func (bd *BaseDevice) SendPacket(command byte, payload []byte) {
 	packet[0x33] = bd.id[3]
 
 	//checksum
-	checksum := 0xbeaf
-	for _, b := range packet {
-		checksum += int(b)
-	}
-	checksum = checksum & 0xffff
+	checksum := getCheckSum(packet)
 	packet[0x34] = byte(checksum & 0xff)
 	packet[0x35] = byte(checksum >> 8)
 
-	aes = AES.new(bytes(self.key), AES.MODE_CBC, bytes(self.iv))
-	payload = aes.encrypt(bytes(payload))
+	//aes = AES.new(bytes(self.key), AES.MODE_CBC, bytes(self.iv))
+	//payload = aes.encrypt(bytes(payload))
+
+	block, aes_err := aes.NewCipher(bd.key)
+	if aes_err != nil {
+		err = aes_err
+		return
+	}
+	ciphertext := make([]byte, 16)
+	mode := cipher.NewCBCEncrypter(block, bd.iv)
+	mode.CryptBlocks(ciphertext, payload)
+	//payload := fmt.Sprintf("%X", ciphertext)
+	packet = append(packet, ciphertext...)
+
+	checksum = getCheckSum(packet)
+	packet[0x20] = byte(checksum & 0xff)
+	packet[0x21] = byte(checksum >> 8)
+
+	rudp, addr_err := net.ResolveUDPAddr("udp", bd.Host)
+	if addr_err != nil {
+		err = addr_err
+		return
+	}
+
+	_, werr := bd.con.WriteToUDP(packet, rudp)
+	if werr != nil {
+		err = werr
+		return
+	}
+
+	size, raddr, rerr := bd.con.ReadFrom(resp)
+	if rerr != nil {
+		err = rerr
+		return
+	}
+	fmt.Printf("get %d bytes from %s\n", size, raddr.String())
+
+	return
+}
+
+func getCheckSum(packet []byte) (checksum uint16) {
+	checksum = 0xbeaf
+	for _, b := range packet {
+		checksum += uint16(b)
+		checksum = checksum & 0xffff
+	}
+	return
 }

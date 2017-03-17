@@ -2,7 +2,6 @@ package broadlink
 
 type RmDevice struct {
 	*BaseDevice
-	HeaterCoolers map[string]*HeaterCooler
 }
 
 func newRM(dev *BaseDevice) *RmDevice {

@@ -14,8 +14,8 @@ type Manager struct {
 	Rm  *BaseDevice
 }
 
-func Discover(timeout time.Duration) (devs []*Device, err error) {
-	devs = make([]*Device, 0)
+func Discover(timeout time.Duration) (devs []Device, err error) {
+	devs = make([]Device, 0)
 	mc_addr := &net.UDPAddr{
 		IP:   net.IPv4bcast,
 		Port: 80,
@@ -111,7 +111,7 @@ func Discover(timeout time.Duration) (devs []*Device, err error) {
 	devtype := uint16(resp[0x34]) | uint16(resp[0x35])<<8
 	mac := resp[0x3a:0x40]
 
-	bd := newBaseDevice(con, host, mac)
+	bd := newBaseDevice(udpcon, host, mac)
 	dev := bd.newDevice(devtype)
 	devs = append(devs, dev)
 
